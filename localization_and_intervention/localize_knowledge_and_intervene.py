@@ -165,7 +165,7 @@ def parse_args():
     parser.add_argument(
         "--calc_attn_cont_fn_variant",
         type=str,
-        default="m_mult_v_mult_o",
+        default="m_mult_v", # m_mult_v_mult_o
         choices=calc_attn_cont_function_variants_mapping.keys(),
     )
     parser.add_argument(

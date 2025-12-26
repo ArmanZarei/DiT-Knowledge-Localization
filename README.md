@@ -2,6 +2,9 @@
 
 🌐 [Project](https://armanzarei.github.io/Localizing-Knowledge-in-DiTs/) &nbsp;| 📄 [ArXiv](https://arxiv.org/abs/2505.18832)
 
+## 🚩 Updates
+- Later in our experiments, we found that using `m_mult_v` in `calc_attn_cont_fn_variant` yields a stronger localization signal—that is, using $\|m \times v\|$ instead of $\|m \times v \times W_o\|$.
+
 ## 🔎 Localization and Intervention
 
 Run localization on the 𝓛oc𝓚 dataset and generate samples with intervention:

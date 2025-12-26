@@ -13,7 +13,7 @@ from transformers import CLIPProcessor, CLIPModel
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from utils import find_substring_token_indices, get_worker_list_chunk, print_arguments
-from attention_processor import FluxAttnContCalculatorProcessor, FluxEmbeddingModifierAttnProcessor
+from attention_processor import FluxAttnContCalculatorProcessor, FluxEmbeddingModifierAttnProcessor, FluxAttnContCalculatorMode
 from clip_score import get_clip_score
 from dataset import get_knowledge_dataset_class_and_get_list_fn, get_eval_text_for_knowledge
 from pipelines.loader import load_pipe
@@ -21,7 +21,7 @@ from pipelines.loader import load_pipe
 
 def localize_dominant_blocks(args, pipe, dataset):
     for idx, basic_transformer_block in enumerate(pipe.transformer.transformer_blocks + pipe.transformer.single_transformer_blocks):
-        basic_transformer_block.attn.set_processor(FluxAttnContCalculatorProcessor(-1))
+        basic_transformer_block.attn.set_processor(FluxAttnContCalculatorProcessor(-1, mode=args.calc_attn_cont_mode))
 
     aggergated_attn_cont = torch.zeros(len(pipe.transformer.transformer_blocks + pipe.transformer.single_transformer_blocks))
 
@@ -126,8 +126,8 @@ def parse_args():
     parser.add_argument(
         "--calc_attn_cont_fn_variant",
         type=str,
-        default="m_mult_v_mult_o",
-        choices=["m_mult_v_mult_o"],
+        default="m_mult_v", # m_mult_v_mult_o
+        choices=["m_mult_v_mult_o", "m_mult_v", "m"],
     )
     parser.add_argument(
         "--knowledge_type",
@@ -136,8 +136,16 @@ def parse_args():
         default=None,
         choices=["style", "place", "copyright", "animal", "celebrity", "safety"]
     )
+    parser.add_argument(
+        "--calc_attn_cont_mode",
+        type=str,
+        default=FluxAttnContCalculatorMode.M_MULT_V_MULT_O.name.lower(),
+        choices=[e.name.lower() for e in FluxAttnContCalculatorMode],
+    )
 
     args = parser.parse_args()
+
+    args.calc_attn_cont_mode = FluxAttnContCalculatorMode[args.calc_attn_cont_mode.upper()]
 
     return args
 

@@ -306,11 +306,19 @@ class FluxCachingAttnProcessor:
             return hidden_states
         
 
+class FluxAttnContCalculatorMode(Enum):
+    M = "m"
+    M_MULT_V = "m_mult_v"
+    M_MULT_V_MULT_O = "m_mult_v_mult_o"
+
+
 class FluxAttnContCalculatorProcessor:
-    def __init__(self, token_indices_for_attn_cont_calc, max_text_tokens_len=512):
+    def __init__(self, token_indices_for_attn_cont_calc, max_text_tokens_len=512, mode: FluxAttnContCalculatorMode = FluxAttnContCalculatorMode.M_MULT_V):
         self.max_text_tokens_len = max_text_tokens_len
 
         self.token_indices_for_attn_cont_calc = token_indices_for_attn_cont_calc
+
+        self.mode = mode
 
         self.attn_contribution = 0.
         self.attn_contribution_update_count = 0
@@ -319,15 +327,30 @@ class FluxAttnContCalculatorProcessor:
         assert isinstance(self.token_indices_for_attn_cont_calc, list)
         assert len(self.token_indices_for_attn_cont_calc) > 0
 
-        m = attention_probs[:, :, self.max_text_tokens_len:, :self.max_text_tokens_len].detach().clone()
-        m = m[0, :, :, self.token_indices_for_attn_cont_calc]
-        v = value[:, :, :self.max_text_tokens_len, :].detach().clone()
-        v = v[0, :, self.token_indices_for_attn_cont_calc, :]
-        o = (m @ v).transpose(0, 1).reshape(m.shape[1], v.shape[0] * v.shape[2]) # (24, 1024, 128) -> (1024, 24*128)
-        o = o.to(query.dtype)
-        if attn.to_out:
-            o = attn.to_out[0](o) # (1024, 24*128) -> (1024, 24*128)
-        attn_cont = torch.norm(o.to(torch.float32), dim=1).mean().item()
+        if self.mode == FluxAttnContCalculatorMode.M_MULT_V_MULT_O:
+            m = attention_probs[:, :, self.max_text_tokens_len:, :self.max_text_tokens_len].detach().clone()
+            m = m[0, :, :, self.token_indices_for_attn_cont_calc]
+            v = value[:, :, :self.max_text_tokens_len, :].detach().clone()
+            v = v[0, :, self.token_indices_for_attn_cont_calc, :]
+            o = (m @ v).transpose(0, 1).reshape(m.shape[1], v.shape[0] * v.shape[2]) # (24, 1024, 128) -> (1024, 24*128)
+            o = o.to(query.dtype)
+            if attn.to_out:
+                o = attn.to_out[0](o) # (1024, 24*128) -> (1024, 24*128)
+            attn_cont = torch.norm(o.to(torch.float32), dim=1).mean().item()
+        elif self.mode == FluxAttnContCalculatorMode.M_MULT_V:
+            m = attention_probs[:, :, self.max_text_tokens_len:, :self.max_text_tokens_len].detach().clone()
+            m = m[0, :, :, self.token_indices_for_attn_cont_calc]
+            v = value[:, :, :self.max_text_tokens_len, :].detach().clone()
+            v = v[0, :, self.token_indices_for_attn_cont_calc, :]
+            o = (m @ v).transpose(0, 1).reshape(m.shape[1], v.shape[0] * v.shape[2]) # (24, 1024, 128) -> (1024, 24*128)
+            attn_cont = torch.norm(o.to(torch.float32), dim=1).mean().item()
+        elif self.mode == FluxAttnContCalculatorMode.M:
+            m = attention_probs[:, :, self.max_text_tokens_len:, :self.max_text_tokens_len].detach().clone()
+            m = m[0, :, :, self.token_indices_for_attn_cont_calc] # 24, 1024, 4
+            ## torch.all(attn.batch_to_head_dim(m)[0] == m.transpose(0, 1).reshape(m.shape[1], m.shape[0]*m.shape[2])) -> True ##
+            attn_cont = torch.mean(torch.norm(attn.batch_to_head_dim(m)[0], dim=1)).item()
+        else:
+            raise ValueError(f"Unknown mode: {self.mode}")
 
         return attn_cont
 
